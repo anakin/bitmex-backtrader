@@ -16,29 +16,35 @@ type KData struct {
 
 func GetMockById(mockId int) (map[string]interface{}, error) {
 	var (
-		id        int
-		sId       int
-		start     time.Time
-		end       time.Time
-		leverage  int
-		init_base int
+		id          int
+		sId         int
+		start       time.Time
+		end         time.Time
+		leverage    int
+		init_base   int64
+		cal_rate    int
+		cal_funding int
+		taker_rate  float64
 	)
-	smt, err := dbConn.Prepare("select id,strategy_id,start_time,end_time,leverage,init_base from mock where id = ?")
+	smt, err := dbConn.Prepare("select id,strategy_id,start_time,end_time,leverage,taker_rate,init_base,cal_rate,cal_funding from mock where id = ?")
 	if err != nil {
 		return nil, err
 	}
-	err1 := smt.QueryRow(mockId).Scan(&id, &sId, &start, &end, &leverage, &init_base)
+	err1 := smt.QueryRow(mockId).Scan(&id, &sId, &start, &end, &leverage, &taker_rate, &init_base, &cal_rate, &cal_funding)
 	if err1 != nil {
 		return nil, err1
 	}
 
 	out := map[string]interface{}{
-		"id":        id,
-		"sid":       sId,
-		"startDate": start,
-		"endDate":   end,
-		"leverage":  leverage,
-		"initBase":  init_base,
+		"id":         id,
+		"sid":        sId,
+		"startDate":  start,
+		"endDate":    end,
+		"leverage":   leverage,
+		"takerRate":  taker_rate,
+		"initBase":   init_base,
+		"calRate":    cal_rate,
+		"calFunding": cal_funding,
 	}
 	return out, nil
 }
@@ -93,7 +99,7 @@ func GetStrategy(strategyId int) (map[string]interface{}, error) {
 		return nil, err
 	}
 	_ = stmtOut.Close()
-	amount, _ := strconv.Atoi(gjson.Get(data, "buy_amount").String())
+	amount, _ := strconv.ParseInt(gjson.Get(data, "buy_amount").String(), 10, 64)
 	buy_direction, _ := strconv.Atoi(gjson.Get(data, "buy_direction").String())
 
 	buy_ma, _ := strconv.Atoi(gjson.Get(data, "buy_ma").String())
@@ -129,6 +135,7 @@ func GetFundingRate(t time.Time) float64 {
 		log.Println("funding error,", err.Error())
 		return float64(0)
 	}
+	_ = smt.Close()
 	return rate
 }
 
@@ -200,10 +207,11 @@ func GetLastPrice(t time.Time) (float64, error) {
 	if err != nil {
 		return float64(0), err1
 	}
+	_ = smt.Close()
 	return price, nil
 }
 
-func AddMockLog(mockId int, ktime time.Time, profit float64, op int, amount int, price float64, rate float64) error {
+func AddMockLog(mockId int, ktime time.Time, profit float64, op int, amount int64, price float64, rate float64) error {
 	smt, err := dbConn.Prepare("insert into mock_log (mock_id,ktime,profit,op,amount,price,rate) values(?,?,?,?,?,?,?)")
 	if err != nil {
 		return err

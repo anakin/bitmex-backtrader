@@ -12,10 +12,12 @@ import (
 type Mock struct {
 	Id         int
 	StrategyId int
-	InitBase   int
+	InitBase   int64
 	StartDate  time.Time
 	EndDate    time.Time
 	TakerRate  float64
+	CalRate    int
+	CalFunding int
 	Leverage   int
 	S          *strategy.Strategy
 }
@@ -33,10 +35,9 @@ const (
 )
 
 var (
-	init_base  float64
 	base       float64
 	profit     = float64(0)
-	position   = 0
+	position   = int64(0)
 	max_dd     = float64(-9999)
 	endTime, _ = time.Parse("2006-01-02 15:04:05", "0001-01-01 00:00:00")
 	avgPrice   = float64(0)
@@ -53,16 +54,25 @@ func InitMocker(m map[string]interface{}) (*Mock, error) {
 		StrategyId: m["sid"].(int),
 		StartDate:  m["startDate"].(time.Time),
 		EndDate:    m["endDate"].(time.Time),
+		TakerRate:  m["takerRate"].(float64),
 		Leverage:   m["leverage"].(int),
-		InitBase:   m["initBase"].(int),
+		InitBase:   m["initBase"].(int64),
+		CalRate:    m["calRate"].(int),
+		CalFunding: m["calFunding"].(int),
 		S:          s,
 	}, nil
 }
 
 func (m *Mock) Loop() {
 	log.Println("start mock strategy:", m.S.Name)
-	init_base = float64(m.InitBase)
-	base = init_base
+	log.Println("start time:", m.StartDate)
+	log.Println("end time:", m.EndDate)
+	log.Println("calculate taker rate:", m.CalRate)
+	log.Println("calculate funding rate:", m.CalFunding)
+	base = float64(m.InitBase)
+	position = 0
+	max_dd = float64(-9999)
+	avgPrice = float64(0)
 	var mockTime time.Time
 	t := make(chan time.Time)
 	ml := &mocklog.MockLog{
@@ -109,16 +119,14 @@ func (m *Mock) Run(t chan time.Time, ml *mocklog.MockLog) {
 						//如果设置了持续加仓
 						if m.S.Keep == 1 {
 							ml.Op = 1
-							ml.Amount = m.S.Amount
 							ml.Price = price
-							m.Buy(price)
+							ml.Amount = m.Buy(price)
 						} else {
 							//空仓的时候买入
 							if position == 0 {
 								ml.Op = 1
-								ml.Amount = m.S.Amount
 								ml.Price = price
-								m.Buy(price)
+								ml.Amount = m.Buy(price)
 							}
 						}
 
@@ -133,18 +141,22 @@ func (m *Mock) Run(t chan time.Time, ml *mocklog.MockLog) {
 					}
 				}
 				//calculate funding rate here
-				funding := float64(0)
-				if isFundingTime(mockTime) && position > 0 {
+				if m.CalFunding == 1 && isFundingTime(mockTime) && position > 0 {
 					rate := dbops.GetFundingRate(mockTime)
 					log.Println("funding rate is:", rate)
-					funding = float64(position) / price * (-rate)
+					funding := float64(position) / price * (-rate)
 					base += funding
 				}
 				//calculate profit here
 
 				if ml.Op > 0 {
-					profit = base / init_base
-					log.Println(mockTime, ";profit=", profit, ";max_dd:", max_dd)
+					//v := float64(0)
+					//if avgPrice > 0 && position > 0 {
+					//	v = float64(position) * (1/avgPrice - 1/price)
+					//}
+					//profit = (base + v) / init_base
+					profit = base / float64(m.InitBase)
+					//log.Println(mockTime, ";profit=", profit, ";base:", base, "posi:", float64(position)/price)
 					max_profit = math.Max(profit, max_profit)
 					max_dd = math.Max(max_dd, max_profit/profit-1)
 					ml.Profit = profit
@@ -241,23 +253,31 @@ func StrToInt(d []string) []int {
 	return res
 }
 
-func (m *Mock) Buy(price float64) {
-	amount := m.S.Amount
-	v := float64(amount) / price
-	position += amount
-	base -= v * (1 + m.TakerRate)
+func (m *Mock) Buy(price float64) int64 {
+	amount := int64(float64(m.InitBase*m.S.Amount/100) * price)
+	//base -= v
+	//log.Println("buy base before:", base)
+	if m.CalRate == 1 {
+		v := float64(amount) / price
+		base -= v * m.TakerRate
+		//log.Println("buy rate :", m.TakerRate, ";v:", v)
+		//log.Println("do buy rate her:", base)
+	}
 	avgPrice = (avgPrice*float64(position) + float64(amount)*price) / float64(position+amount)
+	position += amount
 	log.Println("buy amount:", amount, ";price:", price, ";base:", base)
+	return amount
 }
 
 func (m *Mock) Sell(price float64) {
-	v := float64(position) / price
-	base -= v * m.TakerRate
-	//rate := price/avgPrice - 1
-	//base += float64(position) / avgPrice * (rate + 1)
+	if m.CalRate == 1 {
+		v := float64(position) / price
+		base -= v * m.TakerRate
+		//log.Println("do sell rate her")
+	}
 	rate := 1/avgPrice - 1/price
 	base += float64(position) * rate
-	log.Println("sell amount", position, ";price:", price)
+	log.Println("sell amount", position, ";price:", price, ";base:", base)
 	position = 0
 }
 

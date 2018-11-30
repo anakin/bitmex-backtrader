@@ -10,7 +10,7 @@ type Strategy struct {
 	Id            int
 	Name          string
 	StrategyType  int
-	Amount        int
+	Amount        int64
 	Keep          int
 	BuyDuration   []string
 	BuyDirection  int
@@ -45,7 +45,7 @@ func InitStrategy(strategyId int) (*Strategy, error) {
 		Id:            strategyId,
 		Name:          s["name"].(string),
 		StrategyType:  s["stype"].(int),
-		Amount:        s["amount"].(int),
+		Amount:        s["amount"].(int64),
 		Keep:          s["keep"].(int),
 		BuyDuration:   strings.Split(s["buyDuration"].(string), ","),
 		BuyDirection:  s["buyDirection"].(int),

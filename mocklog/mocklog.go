@@ -10,7 +10,7 @@ type MockLog struct {
 	Ktime  time.Time
 	Profit float64
 	Op     int
-	Amount int
+	Amount int64
 	Price  float64
 	Rate   float64
 }
