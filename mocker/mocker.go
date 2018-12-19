@@ -227,7 +227,7 @@ func (m *Mock) MinTicker() int {
 }
 
 func StrToInt(d []string) []int {
-	res := []int{}
+	res := []int{nil}
 	for _, v := range d {
 		switch v {
 		case KLINE_TIME_MIN:

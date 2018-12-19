@@ -9,6 +9,7 @@ import (
 	"strconv"
 )
 
+
 func RegisterHandlers() *httprouter.Router {
 	router := httprouter.New()
 	router.GET("/mock/:id", MockHandler)
